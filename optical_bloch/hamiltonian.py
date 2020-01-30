@@ -252,3 +252,25 @@ class Hamiltonian:
             self.transformed = self.transformed.subs(self.zero_energy, 0)
 
         self.T = T
+
+    def findDarkStates(self, ground_states, excited_states):
+        """
+        Find the dark states of a system by ...
+
+        Parameters:
+        ground_states   : list with indices of the ground states
+        excited_states  : list with indices of the excited states
+
+        Returns:
+        bright_states   : Matrix with bright states
+        dark_states     : Matrix with excited states
+        """
+        if any(ground_state in excited_states for ground_state in ground_states):
+            raise AssertionError('State can not be both ground and excited.')
+
+        M = self.transformed[ground_states, excited_states].adjoint().as_mutable()
+        for idx in range(len(excited_states)):
+            M[idx,:] /= M[idx,:].norm()
+        bright_states = M
+        dark_states = M.nullspace()[0]
+        return bright_states, dark_states
