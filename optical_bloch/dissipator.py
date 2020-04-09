@@ -1,6 +1,6 @@
 from sympy.matrices import zeros
 from .utils.math import commute, anti_commute
-from sympy import Symbol, Function, Rational, sqrt, simplify
+from sympy import Symbol, Function, Rational, sqrt, simplify, conjugate
 
 class Dissipator:
     """

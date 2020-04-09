@@ -9,7 +9,8 @@ setuptools.setup(
     packages = setuptools.find_packages(),
     install_requires = [
         'numpy',
-        'sympy'
+        'sympy',
+        'scipy'
         ],
     python_requires = '>=3.6',
     version = "0.1"

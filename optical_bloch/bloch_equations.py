@@ -1,8 +1,12 @@
+import itertools
 import numpy as np
+from tqdm import tqdm
 from .utils.math import commute
 from sympy.matrices import zeros
 from .utils.general import flatten
-from sympy import Symbol, conjugate, simplify, Eq, solve
+from scipy.integrate import solve_ivp
+from sympy import Symbol, conjugate, simplify, Eq, solve, diff, \
+                  linear_eq_to_matrix, lambdify, Function
 
 class BlochEquations:
     """
@@ -69,13 +73,17 @@ class BlochEquations:
         Generate the steady state system of equations,
         e.g. dρ(t)/dt = 0 = -i[H,ρ]+L.
         """
-        self.equations_steady_state = Eq(zeros(self.levels, self.levels),simplify(-1j*commute(self.hamiltonian,self.density_matrix_steady_state)+self.dissipator))
+        self.equations_steady_state = Eq(zeros(self.levels, self.levels), \
+            simplify(-1j*commute(self.hamiltonian,\
+                                 self.density_matrix_steady_state)+\
+                     self.dissipator))
         for i in range(self.levels):
             for j in range(self.levels):
                 self.equations_steady_state = self.equations_steady_state.\
                                                replace(self.density_matrix[i,j],
                                                        self.density_matrix_steady_state[i,j])
-    def solveSteadyStateSymbolic(self, replacements):
+
+    def solveSteadyStateSymbolic(self, replacements = []):
         """
         Solve the steady state system of equations dρ(t)/dt = 0 = -i[H,ρ]+L.
         In principle can solve completely symbolically, but not guaranteed to
@@ -87,6 +95,7 @@ class BlochEquations:
         replacements    : list of tuples, each tuple contains a symbolic
                           variable and the numeric replacement value for that
                           variable
+
         Returns:
         solution        : dictionary key, value pair where key is an element of
                           the density matrix and the value the solution for that
@@ -98,5 +107,84 @@ class BlochEquations:
         eqns_rhs = flatten(eqns_rhs.tolist())
         eqns_rhs.append(self.density_matrix_steady_state.trace()-1)
         # using the built in sympy solver, slow but can return symbolic results
-        solution = solve(eqns_rhs, bloch.density_matrix_steady_state)
-        return solution
+        return solve(eqns_rhs, self.density_matrix_steady_state)
+
+    def solveSteadyStateNumeric(self, replacements, parameters_scan = None,
+                                scan_ranges = None):
+        """
+        Solve the steady state system of equations dρ(t)/dt = 0 = -i[H,ρ]+L
+        numerically. Allows for scanning multiple parameters returning an array
+        of [i,j,...,n] where i,j,.. are the lengths of the scan_ranges and n is
+        the number of parameters to solve for
+
+        Parameters:
+        replacements    : list of tuples, each tuple contains a symbolic
+                          variable and the numeric replacement value for that
+                          variable
+        parameters_scan : list of paramters to scan during the solve
+        scan_ranges     : list with the scan ranges in the same order as
+                          parametes_scan
+
+        Returns:
+        solution        : [i,j,...,n] where i,j,.. are the lengths of the
+                          scan_ranges and n is the number of parameters solved
+                          for
+        """
+        # taking the RHS of the steady state equations in order to add the
+        # constraint Tr(ρ) = 1, needed to solve the system of equations
+        eqns_rhs = self.equations_steady_state.rhs.subs(replacements)
+        eqns_rhs = flatten(eqns_rhs.tolist())
+        eqns_rhs[0] += self.density_matrix_steady_state.trace()-1
+
+        for i in range(self.levels):
+            for j in range(i,self.levels):
+                tmp = Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j)))
+                tmp1 = Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+j), chr(0x2080+i)))
+                for idx in range(len(eqns_rhs)):
+                    eqns_rhs[idx] = eqns_rhs[idx].subs(conjugate(tmp), tmp1)
+        syms = []
+        for i in range(self.levels):
+            for j in range(self.levels):
+                syms.append(Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j))))
+        matrix_eq = linear_eq_to_matrix(eqns_rhs, syms)
+
+        if parameters_scan:
+            y = np.zeros([*[len(r) for r in scan_ranges],
+                              len(syms)], dtype = complex)
+            a = lambdify(parameters_scan, matrix_eq[0], 'numpy')
+            b = np.array(matrix_eq[1]).astype(float)
+            for indices in tqdm(itertools.product(*[range(len(r)) for r in scan_ranges]),
+                                total = np.product([len(r) for r in scan_ranges])):
+                param_values = [scan_ranges[idx][idy] for idx,idy in enumerate(indices)]
+                y[indices] = np.linalg.solve(a(*param_values), b)[:,0]
+            return y
+        else:
+            return np.linalg.solve(np.asarray(matrix_eq[0].astype(float)),
+                                   np.asarray(matrix_eq[1].astype(float)))
+
+    def solveNumeric(self, replacements, tspan, y0, max_step = 1e-1,
+                     method = 'RK45'):
+        eqns_rhs = self.equations.rhs.subs(replacements)
+
+        t = Symbol('t', real = True)
+        for i in range(self.levels):
+            for j in range(i,self.levels):
+                tmp = Function(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j)))
+                tmp1 = Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+j), chr(0x2080+i)))
+                eqns_rhs = eqns_rhs.subs(conjugate(tmp(t)), tmp1)
+                
+        for i in range(self.levels):
+            for j in range(i,self.levels):
+                tmp = Function(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j)))
+                tmp1 = Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j)))
+                eqns_rhs = eqns_rhs.subs(tmp(t), tmp1)
+
+        syms = []
+        for i in range(self.levels):
+            for j in range(self.levels):
+                syms.append(Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j))))
+        matrix_eq = np.array(linear_eq_to_matrix(eqns_rhs, syms)[0]).astype(complex)
+        fun = lambda t, rho: matrix_eq@rho
+        sol = solve_ivp(fun, tspan, y0, method, vectorized = False,
+                        max_step = max_step)
+        return sol
