@@ -5,6 +5,7 @@ from .utils.math import commute
 from sympy.matrices import zeros
 from .utils.general import flatten
 from scipy.integrate import solve_ivp
+from scipy.optimize import differential_evolution
 from sympy import Symbol, conjugate, simplify, Eq, solve, diff, \
                   linear_eq_to_matrix, lambdify, Function
 
@@ -121,9 +122,9 @@ class BlochEquations:
         replacements    : list of tuples, each tuple contains a symbolic
                           variable and the numeric replacement value for that
                           variable
-        parameters_scan : list of paramters to scan during the solve
+        parameters_scan : list of parameters to scan during the solve
         scan_ranges     : list with the scan ranges in the same order as
-                          parametes_scan
+                          parameters_scan
 
         Returns:
         solution        : [i,j,...,n] where i,j,.. are the lengths of the
@@ -152,7 +153,7 @@ class BlochEquations:
             y = np.zeros([*[len(r) for r in scan_ranges],
                               len(syms)], dtype = complex)
             a = lambdify(parameters_scan, matrix_eq[0], 'numpy')
-            b = np.array(matrix_eq[1]).astype(float)
+            b = np.array(matrix_eq[1]).astype(complex)
             for indices in tqdm(itertools.product(*[range(len(r)) for r in scan_ranges]),
                                 total = np.product([len(r) for r in scan_ranges])):
                 param_values = [scan_ranges[idx][idy] for idx,idy in enumerate(indices)]
@@ -164,15 +165,37 @@ class BlochEquations:
 
     def solveNumeric(self, replacements, tspan, y0, max_step = 1e-1,
                      method = 'RK45'):
+        """
+        Solve the ODE system of equations dρ(t)/dt = -i[H,ρ]+L numerically.
+        Allows for scanning multiple parameters returning an array of
+        [i,j,...,n] where i,j,.. are the lengths of the scan_ranges and n is
+        the number of parameters to solve for
+
+        Parameters:
+        replacements    : list of tuples, each tuple contains a symbolic
+                          variable and the numeric replacement value for that
+                          variable
+        tspan           : start and stop time for ODE solver
+        y0              : initial conditions of ODE system
+        max_step        : maximum timestep of ODE solver
+        method          : method of ODE solver
+
+        Returns:
+        solution        : [i,j,...,n] where i,j,.. are the lengths of the
+                          scan_ranges and n is the number of parameters solved
+                          for
+        """
         eqns_rhs = self.equations.rhs.subs(replacements)
 
+        # converting the symbolic functions ρ(t) to ρ in order to create the
+        # matrix representing the linear equations (Ax=b)
         t = Symbol('t', real = True)
         for i in range(self.levels):
             for j in range(i,self.levels):
                 tmp = Function(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j)))
                 tmp1 = Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+j), chr(0x2080+i)))
                 eqns_rhs = eqns_rhs.subs(conjugate(tmp(t)), tmp1)
-                
+
         for i in range(self.levels):
             for j in range(i,self.levels):
                 tmp = Function(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j)))
@@ -183,8 +206,80 @@ class BlochEquations:
         for i in range(self.levels):
             for j in range(self.levels):
                 syms.append(Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j))))
+
+        # creating the matrix A (from Ax = b) for the ODE system
         matrix_eq = np.array(linear_eq_to_matrix(eqns_rhs, syms)[0]).astype(complex)
+
+        # ODE solver
         fun = lambda t, rho: matrix_eq@rho
-        sol = solve_ivp(fun, tspan, y0, method, vectorized = False,
+        sol = solve_ivp(fun, tspan, y0, method, vectorized = True,
                         max_step = max_step)
+        return sol
+
+    def optimizeParametersNumeric(self, replacements, tspan, y0, level,
+                                  parameters, bounds, max_step = 1e-1,
+                                  method = 'RK45', minimize = True):
+        """
+        Use a differential evolution optimizer to find the parameters that get
+        the minimum or maximum population in the specified level (ii) after solving the system
+        of ODEsdρ(t)/dt = -i[H,ρ]+L.
+
+        Parameters:
+        replacements    : list of tuples, each tuple contains a symbolic
+                          variable and the numeric replacement value for that
+                          variable
+        tspan           : start and stop time for ODE solver
+        y0              : initial conditions of ODE system
+        level           : level (ii) to minimize or maximize
+        parameters      : list of parameters to optmize
+        bounds          : which range to search in
+        max_step        : maximum timestep of ODE solver
+        method          : method of ODE solver
+        minimize        : boolean to specify wheter to find the minimum or
+                          maximum population in the specified level
+
+        Returns:
+        solution        : solution of the differential evolution optimizer
+        """
+        eqns_rhs = self.equations.rhs.subs(replacements)
+
+        # converting the symbolic functions ρ(t) to ρ in order to create the
+        # matrix representing the linear equations (Ax=b)
+        t = Symbol('t', real = True)
+        for i in range(self.levels):
+            for j in range(i,self.levels):
+                tmp = Function(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j)))
+                tmp1 = Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+j), chr(0x2080+i)))
+                eqns_rhs = eqns_rhs.subs(conjugate(tmp(t)), tmp1)
+
+        for i in range(self.levels):
+            for j in range(i,self.levels):
+                tmp = Function(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j)))
+                tmp1 = Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j)))
+                eqns_rhs = eqns_rhs.subs(tmp(t), tmp1)
+
+        syms = []
+        for i in range(self.levels):
+            for j in range(self.levels):
+                syms.append(Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j))))
+
+        # creating the matrix A (from Ax = b) for the ODE system, has symbolic
+        # variables specified in parameters in matrix
+        matrix_eq = linear_eq_to_matrix(eqns_rhs, syms)[0]
+
+        # turning matrix into a function with variables parameters
+        a = lambdify(parameters, matrix_eq, 'numpy')
+
+        # Set-up ODE solver function for differential evolution
+        ode = lambda t, rho, param_values: a(*param_values)@rho
+        if minimize:
+            funEvo = lambda x: solve_ivp(lambda t, rho: ode(t, rho, x), tspan,
+                               y0, method, vectorized = True,
+                               max_step = max_step).y[self.levels*level + level,-1].astype(float)
+        else:
+            funEvo = lambda x: -solve_ivp(lambda t, rho: ode(t, rho, x), tspan,
+                               y0, method, vectorized = True,
+                               max_step = max_step).y[self.levels*level + level,-1].astype(float)
+                               
+        sol = differential_evolution(funEvo, bounds = bounds)
         return sol

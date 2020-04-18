@@ -75,9 +75,9 @@ sol = bloch.solveSteadyStateNumeric(replacements, [dp,dc1], scan_ranges)
 
 X,Y = np.meshgrid(*scan_ranges)
 fig, ax = plt.subplots(figsize = (10,8))
-cax = ax.pcolormesh(X,Y,sol[:,:,0].astype(float).T)
+cax = ax.pcolormesh(X,Y,sol[:,:,5].astype(float).T)
 cbar = fig.colorbar(cax)
-cp = ax.contour(X,Y,sol[:,:,0].astype(float).T, colors = 'k',
+cp = ax.contour(X,Y,sol[:,:,5].astype(float).T, colors = 'k',
                 linestyles = 'dashed')
 ax.clabel(cp, inline = True, fontsize = 11, fmt = "%.2f")
 
@@ -101,7 +101,7 @@ y0[0] = 1
 
 tstart = time.time()
 sol = bloch.solveNumeric(replacements, [0,20], y0, method = 'BDF')
-print(f"\n{time.time() - tstart:.3f}s to solve 3 level optical bloch equations")
+print(f"\n{time.time() - tstart:.3f}s to solve 4 level optical bloch equations")
 
 fig, ax = plt.subplots(figsize = (10,8))
 ax.plot(sol.t, sol.y[0], label = r'$\rho_{00}$', lw = 2)
@@ -112,4 +112,17 @@ ax.legend(fontsize = 13)
 ax.set_xlabel('time')
 ax.set_ylabel('population')
 
+replacements = [(dc2,0),
+                (ga,1/2),
+                (gb1,1/2),
+                (gb2,1),
+                (Wc1,2),
+                (Wc2,2),
+                (Wp,2)]
+
+sol = bloch.optimizeParametersNumeric(replacements, [0,20], y0, level = 1,
+                                      parameters = (dp, dc1),
+                                      bounds = [(-2.5,2.5), (-1,1)],
+                                      method = 'BDF', minimize = False)
+print(sol)
 plt.show()
