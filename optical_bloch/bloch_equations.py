@@ -160,8 +160,8 @@ class BlochEquations:
                 y[indices] = np.linalg.solve(a(*param_values), b)[:,0]
             return y
         else:
-            return np.linalg.solve(np.asarray(matrix_eq[0].astype(float)),
-                                   np.asarray(matrix_eq[1].astype(float)))
+            return np.linalg.solve(np.asarray(matrix_eq[0], dtype = complex),
+                                   np.asarray(matrix_eq[1], dtype = complex))
 
     def solveNumeric(self, replacements, tspan, y0, max_step = 1e-1,
                      method = 'RK45'):
@@ -218,7 +218,7 @@ class BlochEquations:
 
     def optimizeParametersNumeric(self, replacements, tspan, y0, level,
                                   parameters, bounds, max_step = 1e-1,
-                                  method = 'RK45', minimize = True):
+                                  method = 'RK45', optimize = "minimum"):
         """
         Use a differential evolution optimizer to find the parameters that get
         the minimum or maximum population in the specified level (ii) after solving the system
@@ -235,8 +235,7 @@ class BlochEquations:
         bounds          : which range to search in
         max_step        : maximum timestep of ODE solver
         method          : method of ODE solver
-        minimize        : boolean to specify wheter to find the minimum or
-                          maximum population in the specified level
+        optimize        : specify to find minimum or maximum
 
         Returns:
         solution        : solution of the differential evolution optimizer
@@ -272,14 +271,16 @@ class BlochEquations:
 
         # Set-up ODE solver function for differential evolution
         ode = lambda t, rho, param_values: a(*param_values)@rho
-        if minimize:
+        if optimize == "minimum":
             funEvo = lambda x: solve_ivp(lambda t, rho: ode(t, rho, x), tspan,
                                y0, method, vectorized = True,
-                               max_step = max_step).y[self.levels*level + level,-1].astype(float)
-        else:
+                               max_step = max_step).y[self.levels*level + level,-1].real
+        elif optimize == "maximum":
             funEvo = lambda x: -solve_ivp(lambda t, rho: ode(t, rho, x), tspan,
                                y0, method, vectorized = True,
-                               max_step = max_step).y[self.levels*level + level,-1].astype(float)
-                               
-        sol = differential_evolution(funEvo, bounds = bounds)
+                               max_step = max_step).y[self.levels*level + level,-1].real
+        else:
+            raise ValueError('Specify optimize either as minimum or maximum.')
+
+        sol = differential_evolution(funEvo, bounds = bounds, tol = 1e-4)
         return sol
