@@ -272,13 +272,13 @@ class BlochEquations:
         # Set-up ODE solver function for differential evolution
         ode = lambda t, rho, param_values: a(*param_values)@rho
         if optimize == "minimum":
-            funEvo = lambda x: solve_ivp(lambda t, rho: ode(t, rho, x), tspan,
-                               y0, method, vectorized = True,
-                               max_step = max_step).y[self.levels*level + level,-1].real
+            funEvo = lambda x: solve_ivp(ode, tspan, y0, method, args = (x,),
+                                         vectorized = True, max_step = max_step)\
+                                         .y[self.levels*level + level,-1].real
         elif optimize == "maximum":
-            funEvo = lambda x: -solve_ivp(lambda t, rho: ode(t, rho, x), tspan,
-                               y0, method, vectorized = True,
-                               max_step = max_step).y[self.levels*level + level,-1].real
+            funEvo = lambda x: -solve_ivp(ode, tspan, y0, method, args = (x,),
+                                          vectorized = True, max_step = max_step)\
+                                          .y[self.levels*level + level,-1].real
         else:
             raise ValueError('Specify optimize either as minimum or maximum.')
 
