@@ -40,6 +40,8 @@ dis.addDecay(2,0,ga)
 dis.addDecay(2,1,gb1)
 dis.addDecay(3,1,gb2)
 
+bloch = BlochEquations(4, dis.density_matrix, ham.transformed, dis.dissipator)
+
 replacements = [(dc1,0),
                 (dc2,0),
                 (dp,0),
@@ -50,7 +52,6 @@ replacements = [(dc1,0),
                 (Wc2,2),
                 (Wp,2)]
 
-bloch = BlochEquations(4, dis.density_matrix, ham.transformed, dis.dissipator)
 
 tstart = time.time()
 sol = bloch.solveSteadyStateSymbolic(replacements)
@@ -95,10 +96,10 @@ replacements = [(dc1,0),
                 (Wc1,2),
                 (Wc2,2),
                 (Wp,2)]
-
+#
 y0 = np.zeros(bloch.levels**2, dtype = complex)
 y0[0] = 1
-
+#
 tstart = time.time()
 sol = bloch.solveNumeric(replacements, [0,20], y0, method = 'BDF')
 print(f"\n{time.time() - tstart:.3f}s to solve 4 level optical bloch equations")
