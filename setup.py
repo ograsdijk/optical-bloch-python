@@ -10,7 +10,10 @@ setuptools.setup(
     install_requires = [
         'numpy',
         'sympy',
-        'scipy'
+        'scipy',
+        'networkx',
+        'tqdm',
+        'matplotlib'
         ],
     python_requires = '>=3.6',
     version = "0.1"

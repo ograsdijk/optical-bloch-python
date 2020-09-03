@@ -76,7 +76,7 @@ sol = bloch.solveSteadyStateNumeric(replacements, [dp,dc1], scan_ranges)
 
 X,Y = np.meshgrid(*scan_ranges)
 fig, ax = plt.subplots(figsize = (10,8))
-cax = ax.pcolormesh(X,Y,sol[:,:,5].real.T)
+cax = ax.pcolormesh(X,Y,sol[:,:,5].real.T, shading='auto')
 cbar = fig.colorbar(cax)
 cp = ax.contour(X,Y,sol[:,:,5].real.T, colors = 'k',
                 linestyles = 'dashed')

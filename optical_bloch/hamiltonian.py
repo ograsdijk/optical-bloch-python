@@ -1,4 +1,5 @@
 import numpy as np
+import networkx as nx
 from sympy import conjugate
 from sympy.matrices import zeros, eye
 from sympy.functions.elementary.exponential import exp as symb_exp
@@ -96,7 +97,7 @@ class Hamiltonian:
     def addPolyCoupling(self, initial_state, final_state, rabi_rate, omega):
         """
         """
-        if (inital_state > self.levels) or (final_state > self.levels):
+        if (initial_state > self.levels) or (final_state > self.levels):
             raise AssertionError('Specified state exceeds size of Hamiltonian')
 
         self.couplings[initial_state, final_state] = omega
@@ -145,7 +146,7 @@ class Hamiltonian:
                                                 self.hamiltonian[final_state, final_state],
                                                 detuning, w])
 
-    def defineEnergyDetuning(self, inital_energy, final_energy, detuning, omega):
+    def defineEnergyDetuning(self, initial_energy, final_energy, detuning, omega):
         """
         """
         if detuning in self.detunings:
@@ -157,7 +158,7 @@ class Hamiltonian:
         self.transformed = self.transformed.subs(omega, final_energy - initial_energy - detuning)
 
         if self.zero_energy:
-            self.transformed = self.transformed.subs(self.zero-energy, 0)
+            self.transformed = self.transformed.subs(self.zero_energy, 0)
 
         self.detunings.append([initial_energy, final_energy, detuning, omega])
 
