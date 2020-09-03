@@ -31,10 +31,13 @@ class Dissipator:
                 # \u03C1 is unicode for ρ, chr(0x2080+i) is unicode for
                 # subscript num(i), resulting in ρ₀₀(t) for example
                 if i == j:
-                    self.density_matrix[i,j] = Function(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j)))(t)
+                    self.density_matrix[i,j] = Function(u'\u03C1{0}{1}'. \
+                                        format(chr(0x2080+i), chr(0x2080+j)))(t)
                 else:
-                    self.density_matrix[i,j] = Function(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j)))(t)
-                    self.density_matrix[j,i] = conjugate(Function(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j)))(t))
+                    self.density_matrix[i,j] = Function(u'\u03C1{0}{1}'. \
+                                        format(chr(0x2080+i), chr(0x2080+j)))(t)
+                    self.density_matrix[j,i] = \
+    conjugate(Function(u'\u03C1{0}{1}'.format(chr(0x2080+i), chr(0x2080+j)))(t))
 
     def addDecay(self, initial_state, final_state, gamma):
         """
@@ -54,7 +57,8 @@ class Dissipator:
         # adding the decay to the dissipator
         G = zeros(self.levels, self.levels)
         G[final_state, initial_state] = sqrt(gamma)
-        self.dissipator -= Rational(1/2) * anti_commute(G.T@G, self.density_matrix) - G@self.density_matrix@G.T
+        self.dissipator -= Rational(1/2) * \
+            anti_commute(G.T@G, self.density_matrix) - G@self.density_matrix@G.T
         self.dissipator = simplify(self.dissipator)
 
         # update decay rates
@@ -65,6 +69,8 @@ class Dissipator:
         # add the decay to the branching ratio matrix
         for i in range(self.levels):
             if i == final_state:
-                self.branching[initial_state, i] = (self.branching[initial_state, i]*decay_rate_old+gamma)/decay_rate_new
+                self.branching[initial_state, i] = \
+        (self.branching[initial_state, i]*decay_rate_old+gamma)/decay_rate_new
             else:
-                self.branching[initial_state, i] = (self.branching[initial_state, i]*decay_rate_old)/decay_rate_new
+                self.branching[initial_state, i] = \
+                (self.branching[initial_state, i]*decay_rate_old)/decay_rate_new

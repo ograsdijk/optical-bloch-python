@@ -47,7 +47,8 @@ class Hamiltonian:
         zero_energy : state Symbol() which to set to zero
         """
         if not zero_energy in self.energies.free_symbols:
-            raise AssertionError('Specified energy not in any of the energy levels.')
+            raise AssertionError(
+                            'Specified energy not in any of the energy levels.')
         self.zero_energy = zero_energy
         self.transformed = self.transformed.subs(zero_energy, 0)
 
@@ -76,22 +77,28 @@ class Hamiltonian:
         rabi_rate      : rabi rate of coupling between initial and final, Symbol
         omega          : requency of coupling between initial and final, Symbol
         """
-        if (initial_state > self.hamiltonian.shape[0]) or (final_state > self.hamiltonian.shape[0]):
+        if  (initial_state > self.hamiltonian.shape[0]) or \
+            (final_state > self.hamiltonian.shape[0]):
             raise AssertionError('Specified state exceeds size of Hamiltonian')
 
-        # setting the frequency and rabi rate of the coupling to the symbolic matrices
+        # setting the frequency and rabi rate of the coupling to the symbolic 
+        # matrices
         self.couplings[initial_state, final_state] = omega
         self.rabi[initial_state, final_state]      = rabi_rate
 
-        # adding the coupling frequency to the frequencies list if not already present
+        # adding the coupling frequency to the frequencies list if not already 
+        # present
         if omega not in self.frequencies:
             self.frequencies.append(omega)
 
         # adding the appropriote terms to the symbolic Hamiltonian matrix
         t = Symbol('t', real = True)
-        self.hamiltonian[initial_state, final_state] = -rabi_rate/2*symb_exp(1j*omega*t)
-        self.hamiltonian[final_state, initial_state] = -conjugate(rabi_rate)/2*symb_exp(-1j*omega*t)
-        # incrementing the number of couplings counter from a specific initial state
+        self.hamiltonian[initial_state, final_state] = \
+                                            -rabi_rate/2*symb_exp(1j*omega*t)
+        self.hamiltonian[final_state, initial_state] = \
+                                -conjugate(rabi_rate)/2*symb_exp(-1j*omega*t)
+        # incrementing the number of couplings counter from a specific initial 
+        # state
         self.cpl[initial_state] += 1
 
     def addPolyCoupling(self, initial_state, final_state, rabi_rate, omega):
@@ -107,8 +114,10 @@ class Hamiltonian:
             self.frequencies.append(omega)
 
         t = Symbol('t', real = True)
-        self.hamiltonian[initial_state, final_state] -= rabi_rate/2*symb_exp(1j*omega*t)
-        self.hamiltonian[final_state, initial_state] -= conjugate(rabi_rate)/2*symb_exp(-1j*omega*t)
+        self.hamiltonian[initial_state, final_state] -= \
+                                                rabi_rate/2*symb_exp(1j*omega*t)
+        self.hamiltonian[final_state, initial_state] -= \
+                                    conjugate(rabi_rate)/2*symb_exp(-1j*omega*t)
         self.cpl[initial_state] += 1
 
     def defineStateDetuning(self, initial_state, final_state, detuning):
@@ -124,29 +133,33 @@ class Hamiltonian:
             raise AssertionError('Detuning already defined.')
 
         # check if the coupling for which the state detuning is requested exists
-        if (self.couplings[initial_state, final_state] == 0) and \
-           (self.couplings[final_state, initial_state] == 0):
+        if  (self.couplings[initial_state, final_state] == 0) and \
+            (self.couplings[final_state, initial_state] == 0):
             raise AssertionError('No coupling between states')
 
-        # couplings are defined as initial->final; grab non-zero frequency from initial->final or final->initial
-        # (accounts for user error in specifying the detuning initial and final state)
+        # couplings are defined as initial->final; grab non-zero frequency from 
+        # initial->final or final->initial (accounts for user error in 
+        # specifying the detuning initial and final state)
         w = self.couplings[initial_state, final_state]
         if w == 0:
             w = self.couplings[final_state, initial_state]
 
         # adding the detuning the the transformed matrix
-        self.transformed = self.transformed.subs(w,self.hamiltonian[final_state,final_state] - self.hamiltonian[initial_state, initial_state] - detuning)
+        self.transformed = self.transformed.subs(
+                    + w,self.hamiltonian[final_state,final_state] \
+                    - self.hamiltonian[initial_state, initial_state] - detuning)
 
         # if the zero_energy is added via the state detuning, set it to zero
         if self.zero_energy:
             self.transformed = self.transformed.subs(self.zero_energy, 0)
 
         # append the detuning to the detunings list
-        self.detunings.append([self.hamiltonian[initial_state, initial_state],
-                                                self.hamiltonian[final_state, final_state],
-                                                detuning, w])
+        self.detunings.append([ self.hamiltonian[initial_state, initial_state],
+                                self.hamiltonian[final_state, final_state],
+                                detuning, w])
 
-    def defineEnergyDetuning(self, initial_energy, final_energy, detuning, omega):
+    def defineEnergyDetuning(self, initial_energy, final_energy, detuning, 
+                                omega):
         """
         """
         if detuning in self.detunings:
@@ -155,7 +168,9 @@ class Hamiltonian:
         if omega not in self.frequencies:
             raise AssertionError('Coupling does not exist')
 
-        self.transformed = self.transformed.subs(omega, final_energy - initial_energy - detuning)
+        self.transformed = self.transformed.subs(
+            omega, final_energy - initial_energy - detuning
+            )
 
         if self.zero_energy:
             self.transformed = self.transformed.subs(self.zero_energy, 0)
@@ -165,8 +180,9 @@ class Hamiltonian:
 
     def eqnTransform(self):
         """
-        Calculate the rotational wave approximation by solving a system of equations, only usable if
-        the number of couplings does not exceed the number of states
+        Calculate the rotational wave approximation by solving a system of 
+        equations, only usable if the number of couplings does not exceed the 
+        number of states
         """
         A = symbols(f'a0:{self.levels}')
 
@@ -191,7 +207,8 @@ class Hamiltonian:
                 T[i,i] = 1
         self.T = T
 
-        self.transformed = T.adjoint()@self.hamiltonian@T-1j*T.adjoint()@diff(T,Symbol('t', real = True))
+        self.transformed = T.adjoint()@self.hamiltonian@T \
+                                -1j*T.adjoint()@diff(T,Symbol('t', real = True))
         self.transformed = simplify(self.transformed)
 
         for i in range(self.levels):
@@ -199,25 +216,30 @@ class Hamiltonian:
                 if self.transformed[i,j] != 0:
                     val = self.transformed[i,j]*2/self.rabi[i,j]
                     if val not in [-1,1]:
-                        raise AssertionError('Could not find unitary transformation')  \
+                        raise AssertionError(
+                                        'Could not find unitary transformation')
 
     def shortestCouplingPath(self, graph, initial_state):
         """
         """
         # find the indices of the states which are defined as the zero_energy
-        indices_zero_energy = np.where(np.array(self.energies) == self.zero_energy)[1]
+        indices_zero_energy = np.where(
+                                np.array(self.energies) == self.zero_energy)[1]
         if indices_zero_energy.size == 0:
             return 0
 
-        # get the first succesful shortest path from the initial state to a state with zero_energy
+        # get the first succesful shortest path from the initial state to a 
+        # state with zero_energy
         for idx in indices_zero_energy:
-            shortest_path = nx.algorithms.shortest_path(graph, source=initial_state, target = idx, weight = 'weight')
+            shortest_path = nx.algorithms.shortest_path(graph, 
+                        source=initial_state, target = idx, weight = 'weight')
             if shortest_path:
                 break
 
         print(initial_state, shortest_path)
 
-        # calculate the total coupling phase between the initial state and final state
+        # calculate the total coupling phase between the initial state and final 
+        # state
         phase = 0
         for j in range(len(shortest_path)-1):
             start, stop = shortest_path[j:j+2]
@@ -231,7 +253,8 @@ class Hamiltonian:
         """
         """
         if not self.zero_energy:
-            raise AssertionError('Zero energy has to be specified for this transformation method.')
+            raise AssertionError(
+            'Zero energy has to be specified for this transformation method.')
 
         t = Symbol('t', real = True)
 
@@ -241,13 +264,16 @@ class Hamiltonian:
             T[i,i] = T[i,i]*symb_exp(1j*phase*t)
         T = simplify(T)
 
-        self.transformed = T.adjoint()@self.hamiltonian@T-1j*T.adjoint()@diff(T,Symbol('t', real = True))
+        self.transformed = T.adjoint()@self.hamiltonian@T \
+                                -1j*T.adjoint()@diff(T,Symbol('t', real = True))
 
         if self.detunings:
             print(self.detunings)
             for i in range(len(self.detunings)):
                 detuning = self.detunings[i]
-                self.transformed = self.transformed.subs(detuning[3], detuning[1] - detuning[0] - detuning[2])
+                self.transformed = self.transformed.subs(
+                            detuning[3], detuning[1] - detuning[0] - detuning[2]
+                            )
 
         if self.zero_energy:
             self.transformed = self.transformed.subs(self.zero_energy, 0)

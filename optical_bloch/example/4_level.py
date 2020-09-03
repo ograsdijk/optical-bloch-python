@@ -122,8 +122,8 @@ replacements = [(dc2,0),
                 (Wp,2)]
 
 sol = bloch.optimizeParametersNumeric(replacements, [0,20], y0, level = 1,
-                                      parameters = (dp, dc1),
-                                      bounds = [(-2.5,2.5), (-1,1)],
-                                      method = 'BDF', optimize = 'minimum')
+                                    parameters = (dp, dc1),
+                                    bounds = [(-2.5,2.5), (-1,1)],
+                                    method = 'BDF', optimize = 'minimum')
 print(sol)
 plt.show()
