@@ -69,6 +69,42 @@ class BlochEquations:
         self.equations = Eq(diff(self.density_matrix),
     simplify(-1j*commute(self.hamiltonian,self.density_matrix)+self.dissipator))
 
+    def generateSystem(self, replacements, full_output = False):
+        eqns_rhs = self.equations.rhs.subs(replacements)
+
+        # converting the symbolic functions ρ(t) to ρ in order to create the
+        # matrix representing the linear equations (Ax=b)
+        t = Symbol('t', real = True)
+        for i in range(self.levels):
+            for j in range(i,self.levels):
+                tmp = Function(u'\u03C1{0}{1}'.format(chr(0x2080+i), 
+                                                            chr(0x2080+j)))
+                tmp1 = Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+j), 
+                                                            chr(0x2080+i)))
+                eqns_rhs = eqns_rhs.subs(conjugate(tmp(t)), tmp1)
+
+        for i in range(self.levels):
+            for j in range(i,self.levels):
+                tmp = Function(u'\u03C1{0}{1}'.format(chr(0x2080+i), 
+                                                            chr(0x2080+j)))
+                tmp1 = Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+i), 
+                                                            chr(0x2080+j)))
+                eqns_rhs = eqns_rhs.subs(tmp(t), tmp1)
+
+        syms = []
+        for i in range(self.levels):
+            for j in range(self.levels):
+                syms.append(Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+i), 
+                                                                chr(0x2080+j))))
+
+        # creating the matrix A (from Ax = b) for the ODE system
+        matrix_eq = np.array(linear_eq_to_matrix(eqns_rhs, syms)[0])\
+                                                                .astype(complex)
+        if full_output:
+            return matrix_eq, syms
+        else:
+            return matrix_eq
+
     def generateEquationsSteadyState(self):
         """
         Generate the steady state system of equations,
@@ -84,6 +120,32 @@ class BlochEquations:
                 self.equations_steady_state = self.equations_steady_state.\
                                 replace(self.density_matrix[i,j], 
                                         self.density_matrix_steady_state[i,j])
+
+    def generateSystemSteadyState(self, replacements, full_output = False):
+        # taking the RHS of the steady state equations in order to add the
+        # constraint Tr(ρ) = 1, needed to solve the system of equations
+        eqns_rhs = self.equations_steady_state.rhs.subs(replacements)
+        eqns_rhs = flatten(eqns_rhs.tolist())
+        eqns_rhs[0] += self.density_matrix_steady_state.trace()-1
+
+        for i in range(self.levels):
+            for j in range(i,self.levels):
+                tmp = Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+i), 
+                                                        chr(0x2080+j)))
+                tmp1 = Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+j), 
+                                                        chr(0x2080+i)))
+                for idx in range(len(eqns_rhs)):
+                    eqns_rhs[idx] = eqns_rhs[idx].subs(conjugate(tmp), tmp1)
+        syms = []
+        for i in range(self.levels):
+            for j in range(self.levels):
+                syms.append(Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+i), 
+                                                            chr(0x2080+j))))
+        matrix_eq = linear_eq_to_matrix(eqns_rhs, syms)       
+        if full_output:
+            return matrix_eq, syms
+        else:
+            return matrix_eq
 
     def solveSteadyStateSymbolic(self, replacements = []):
         """
@@ -132,26 +194,7 @@ class BlochEquations:
                             scan_ranges and n is the number of parameters solved
                             for
         """
-        # taking the RHS of the steady state equations in order to add the
-        # constraint Tr(ρ) = 1, needed to solve the system of equations
-        eqns_rhs = self.equations_steady_state.rhs.subs(replacements)
-        eqns_rhs = flatten(eqns_rhs.tolist())
-        eqns_rhs[0] += self.density_matrix_steady_state.trace()-1
-
-        for i in range(self.levels):
-            for j in range(i,self.levels):
-                tmp = Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+i), 
-                                                        chr(0x2080+j)))
-                tmp1 = Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+j), 
-                                                        chr(0x2080+i)))
-                for idx in range(len(eqns_rhs)):
-                    eqns_rhs[idx] = eqns_rhs[idx].subs(conjugate(tmp), tmp1)
-        syms = []
-        for i in range(self.levels):
-            for j in range(self.levels):
-                syms.append(Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+i), 
-                                                            chr(0x2080+j))))
-        matrix_eq = linear_eq_to_matrix(eqns_rhs, syms)
+        matrix_eq, syms = self.generateSystemSteadyState(replacements, True)
 
         if parameters_scan:
             y = np.zeros([*[len(r) for r in scan_ranges],
@@ -189,36 +232,7 @@ class BlochEquations:
                             scan_ranges and n is the number of parameters solved
                             for
         """
-        eqns_rhs = self.equations.rhs.subs(replacements)
-
-        # converting the symbolic functions ρ(t) to ρ in order to create the
-        # matrix representing the linear equations (Ax=b)
-        t = Symbol('t', real = True)
-        for i in range(self.levels):
-            for j in range(i,self.levels):
-                tmp = Function(u'\u03C1{0}{1}'.format(chr(0x2080+i), 
-                                                            chr(0x2080+j)))
-                tmp1 = Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+j), 
-                                                            chr(0x2080+i)))
-                eqns_rhs = eqns_rhs.subs(conjugate(tmp(t)), tmp1)
-
-        for i in range(self.levels):
-            for j in range(i,self.levels):
-                tmp = Function(u'\u03C1{0}{1}'.format(chr(0x2080+i), 
-                                                            chr(0x2080+j)))
-                tmp1 = Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+i), 
-                                                            chr(0x2080+j)))
-                eqns_rhs = eqns_rhs.subs(tmp(t), tmp1)
-
-        syms = []
-        for i in range(self.levels):
-            for j in range(self.levels):
-                syms.append(Symbol(u'\u03C1{0}{1}'.format(chr(0x2080+i), 
-                                                                chr(0x2080+j))))
-
-        # creating the matrix A (from Ax = b) for the ODE system
-        matrix_eq = np.array(linear_eq_to_matrix(eqns_rhs, syms)[0])\
-                                                                .astype(complex)
+        matrix_eq = self.generateSystem(replacements)
 
         # ODE solver
         fun = lambda t, rho: matrix_eq@rho
@@ -241,7 +255,7 @@ class BlochEquations:
         tspan           :   start and stop time for ODE solver
         y0              :   initial conditions of ODE system
         level           :   level (ii) to minimize or maximize
-        parameters      :   list of parameters to optmize
+        parameters      :   list of parameters to optimize
         bounds          :   which range to search in
         max_step        :   maximum timestep of ODE solver
         method          :   method of ODE solver
