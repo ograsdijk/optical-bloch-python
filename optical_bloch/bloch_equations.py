@@ -98,12 +98,21 @@ class BlochEquations:
                                                                 chr(0x2080+j))))
 
         # creating the matrix A (from Ax = b) for the ODE system
-        matrix_eq = np.array(linear_eq_to_matrix(eqns_rhs, syms)[0])\
-                                                                .astype(complex)
-        if full_output:
-            return matrix_eq, syms
+        matrix_eq = linear_eq_to_matrix(eqns_rhs, syms)[0]
+
+        # check if there is still time dependence inside the matrix, return
+        # a lambdified function if yes, else return a numpy array
+        if t in matrix_eq.free_symbols:
+            t_dependent = True
+            matrix_eq = lambdify(t, matrix_eq)
         else:
-            return matrix_eq
+            t_dependent = False
+            matrix_eq = np.array(matrix_eq).astype(complex)
+
+        if full_output:
+            return matrix_eq, t_dependent, syms
+        else:
+            return matrix_eq, t_dependent
 
     def generateEquationsSteadyState(self):
         """
@@ -194,7 +203,9 @@ class BlochEquations:
                             scan_ranges and n is the number of parameters solved
                             for
         """
-        matrix_eq, syms = self.generateSystemSteadyState(replacements, True)
+        matrix_eq, t_dependent, syms = self.generateSystemSteadyState(replacements, True)
+        if t_dependent:
+            raise AssertionError('No steady state solution for time dependent variables')
 
         if parameters_scan:
             y = np.zeros([*[len(r) for r in scan_ranges],
@@ -232,10 +243,13 @@ class BlochEquations:
                             scan_ranges and n is the number of parameters solved
                             for
         """
-        matrix_eq = self.generateSystem(replacements)
+        matrix_eq, t_dependent = self.generateSystem(replacements)
 
         # ODE solver
-        fun = lambda t, rho: matrix_eq@rho
+        if t_dependent:
+            fun = lambda t, rho: matrix_eq(t)@rho
+        else:
+            fun = lambda t, rho: matrix_eq@rho
         sol = solve_ivp(fun, tspan, y0, method, vectorized = True,
                         max_step = max_step)
         return sol
