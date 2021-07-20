@@ -104,7 +104,7 @@ class BlochEquations:
         # a lambdified function if yes, else return a numpy array
         if t in matrix_eq.free_symbols:
             t_dependent = True
-            matrix_eq = lambdify(t, matrix_eq)
+            matrix_eq = lambdify(t, matrix_eq, 'numpy')
         else:
             t_dependent = False
             matrix_eq = np.array(matrix_eq).astype(complex)
