@@ -39,6 +39,8 @@ class Hamiltonian:
         # by default no zero energy defined
         self.zero_energy = None
 
+        self.transformed = None
+
     def defineZero(self,zero_energy):
         """
         Defining the zero level energy
@@ -50,7 +52,9 @@ class Hamiltonian:
             raise AssertionError(
                             'Specified energy not in any of the energy levels.')
         self.zero_energy = zero_energy
-        self.transformed = self.transformed.subs(zero_energy, 0)
+
+        if self.transformed:
+            self.transformed = self.transformed.subs(zero_energy, 0)
 
     def addEnergies(self,energies):
         """
@@ -215,7 +219,7 @@ class Hamiltonian:
             for j in range(i+1,self.levels):
                 if self.transformed[i,j] != 0:
                     val = self.transformed[i,j]*2/self.rabi[i,j]
-                    if val not in [-1,1]:
+                    if not np.any(np.isclose(float(val), [-1,1])):
                         raise AssertionError(
                                         'Could not find unitary transformation')
 
