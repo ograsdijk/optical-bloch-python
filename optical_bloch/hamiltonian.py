@@ -218,7 +218,10 @@ class Hamiltonian:
         for i in range(self.levels):
             for j in range(i+1,self.levels):
                 if self.transformed[i,j] != 0:
-                    val = self.transformed[i,j]*2/self.rabi[i,j]
+                    if self.rabi[i,j] != 0:
+                        val = self.transformed[i,j]*2/self.rabi[i,j]
+                    else:
+                        val = self.transformed[j,i]*2/self.rabi[j,i]
                     if not np.any(np.isclose(float(val), [-1,1])):
                         raise AssertionError(
                                         'Could not find unitary transformation')
