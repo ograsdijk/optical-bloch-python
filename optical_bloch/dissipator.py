@@ -1,4 +1,4 @@
-from sympy import Function, Rational, Symbol, conjugate, simplify, sqrt
+from sympy import Function, Matrix, Rational, Symbol, conjugate, simplify, sqrt
 from sympy.matrices import zeros
 
 from .utils.math import anti_commute, commute
@@ -27,25 +27,14 @@ class Dissipator:
         """
         Generate the symbolic density matrix
         """
-        self.density_matrix = zeros(self.levels, self.levels)
         t = Symbol("t", real=True)
-        for i in range(self.levels):
-            for j in range(i, self.levels):
-                # \u03C1 is unicode for ρ, chr(0x2080+i) is unicode for
-                # subscript num(i), resulting in ρ₀₀(t) for example
-                if i == j:
-                    self.density_matrix[i, j] = Function(
-                        "\u03c1{0}{1}".format(chr(0x2080 + i), chr(0x2080 + j))
-                    )(t)
-                else:
-                    self.density_matrix[i, j] = Function(
-                        "\u03c1{0}{1}".format(chr(0x2080 + i), chr(0x2080 + j))
-                    )(t)
-                    self.density_matrix[j, i] = conjugate(
-                        Function(
-                            "\u03c1{0}{1}".format(chr(0x2080 + i), chr(0x2080 + j))
-                        )(t)
-                    )
+        self.density_matrix = Matrix(
+            self.levels,
+            self.levels,
+            lambda i, j: Function(f"ρ{i}{j}")(t)
+            if j > i - 1
+            else conjugate(Function(f"ρ{j}{i}")(t)),
+        )
 
     def add_decay(self, initial_state, final_state, gamma):
         """

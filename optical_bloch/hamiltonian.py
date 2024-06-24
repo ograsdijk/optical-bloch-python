@@ -1,8 +1,17 @@
 from typing import Iterable, Sequence
 
-import networkx as nx
 import numpy as np
-from sympy import Symbol, conjugate, diff, nsimplify, simplify, solve, symbols
+from sympy import (
+    Matrix,
+    Symbol,
+    conjugate,
+    diff,
+    eye,
+    nsimplify,
+    simplify,
+    solve,
+    symbols,
+)
 from sympy.functions.elementary.exponential import exp as symb_exp
 from sympy.matrices import diag, zeros
 
@@ -12,7 +21,9 @@ class Hamiltonian:
     Class for setting up the hamiltonian for a ODE system of Bloch equations.
     """
 
-    def __init__(self, levels: None = None, energies: None | Sequence[Symbol] = None):
+    def __init__(
+        self, levels: None | int = None, energies: None | Sequence[Symbol] = None
+    ):
         """ """
         if levels is None and energies is None:
             raise ValueError("Supply either the energies or number of levels.")
@@ -23,24 +34,19 @@ class Hamiltonian:
         elif levels is not None:
             self.levels = levels
             self.energies = symbols(f"E0:{levels}", real=True)
-            self.hamiltonian = zeros(self.levels, self.levels)
+            self.hamiltonian = zeros(self.levels, self.levels) + diag(*self.energies)
 
-        # defining the couplings and rabi rate matrices
+        # defining the couplings and rabi rates
         # couplings contains the frequencies between levels
-        # rabi contains the rabi rates of the couplings between levels
-        self.couplings = zeros(self.levels, self.levels)
-        self.rabi = zeros(self.levels, self.levels)
+        # rabis contains the rabi rates of the couplings between levels
+        self.couplings: dict[(int, int), Symbol] = {}
+        self.rabis: dict[(int, int), Symbol] = {}
 
         # level detunings list
-        self.detunings = []
+        self.detunings: list[Symbol] = []
 
         # frequencies list
-        self.frequencies = []
-
-        # energies list
-
-        # by default no zero energy defined
-        self.zero_energy = None
+        self.frequencies: list[Symbol] = []
 
         self.transformed = None
 
@@ -51,12 +57,11 @@ class Hamiltonian:
         Parameters:
         zero_energy : state Symbol() which to set to zero
         """
-        if zero_energy not in self.energies.free_symbols:
+        if zero_energy not in self.energies:
             raise AssertionError("Specified energy not in any of the energy levels.")
-        self.zero_energy = zero_energy
 
         if self.transformed:
-            self.transformed = self.transformed.subs(zero_energy, 0)
+            self.transformed -= zero_energy * eye(self.levels)
 
     def add_energies(self, energies):
         """
@@ -89,7 +94,7 @@ class Hamiltonian:
         # setting the frequency and rabi rate of the coupling to the symbolic
         # matrices
         self.couplings[initial, final] = omega
-        self.rabi[initial, final] = rabi
+        self.rabis[initial, final] = rabi
 
         # adding the coupling frequency to the frequencies list if not already
         # present
@@ -103,7 +108,13 @@ class Hamiltonian:
             conjugate(rabi) / 2 * symb_exp(-1j * omega * t)
         )
 
-    def add_manifold_coupling(self, initial_manifold, final_manifold, rabis, omega):
+    def add_manifold_coupling(
+        self,
+        initial_manifold: Sequence[int],
+        final_manifold: Sequence[int],
+        rabis: Sequence[Symbol] | Symbol,
+        omega: Symbol,
+    ) -> None:
         if isinstance(rabis, Iterable):
             for idi, idf, r in zip(initial_manifold, final_manifold, rabis):
                 self.add_coupling(idi, idf, r, omega)
@@ -111,49 +122,47 @@ class Hamiltonian:
             for idi, idf in zip(initial_manifold, final_manifold):
                 self.add_coupling(idi, idf, rabis, omega)
 
-    def define_state_detuning(self, initial, final, detuning):
+    def define_state_detuning(self, initial: int, final: int, detuning: Symbol):
         """
         Adding a state detuning, requires that self.transformed is defined
 
-        Paramters:
+        Parameters:
         initial_state : initial coupled state
         final_state   : final coupled state
         detuning      : state detuning, Symbol
         """
-        if detuning in self.detunings:
+        if detuning in [d[-1] for d in self.detunings]:
             raise AssertionError("Detuning already defined.")
 
         # check if the coupling for which the state detuning is requested exists
-        if (self.couplings[initial, final] == 0) and (
-            self.couplings[final, initial] == 0
-        ):
+        if self.couplings.get((initial, final)) is None:
             raise AssertionError("No coupling between states")
 
-        # couplings are defined as initial->final; grab non-zero frequency from
-        # initial->final or final->initial (accounts for user error in
-        # specifying the detuning initial and final state)
-        w = self.couplings[initial, final]
-        if w == 0:
-            w = self.couplings[final, initial]
+        w = self.couplings[(initial, final)]
 
         # adding the detuning the the transformed matrix
-        self.transformed = self.transformed.subs(
-            w, self.energies[final] - self.energies[initial] - detuning
-        )
+        if initial < final:
+            self.transformed = self.transformed.subs(
+                w, self.energies[final] - self.energies[initial] - detuning
+            )
+        elif final < initial:
+            self.transformed = self.transformed.subs(
+                w, self.energies[initial] - self.energies[final] - detuning
+            )
 
         # append the detuning to the detunings list
         self.detunings.append(
             [
                 w,
-                self.hamiltonian[final, final],
                 self.hamiltonian[initial, initial],
+                self.hamiltonian[final, final],
                 detuning,
             ]
         )
 
     def define_energy_detuning(self, initial_energy, final_energy, detuning, omega):
         """ """
-        if detuning in self.detunings:
+        if detuning in [d[-1] for d in self.detunings]:
             raise AssertionError("Detuning already defined.")
 
         if omega not in self.frequencies:
@@ -163,10 +172,7 @@ class Hamiltonian:
             omega, final_energy - initial_energy - detuning
         )
 
-        if self.zero_energy:
-            self.transformed = self.transformed.subs(self.zero_energy, 0)
-
-        self.detunings.append([initial_energy, final_energy, detuning, omega])
+        self.detunings.append([omega, initial_energy, final_energy, detuning])
 
     def eqn_transform(self):
         """
@@ -183,7 +189,7 @@ class Hamiltonian:
         Eqns = []
         for i in range(len(A)):
             for j in range(len(A)):
-                if self.couplings[i, j] != 0:
+                if self.couplings.get((i, j)) is not None:
                     Eqns.append(self.couplings[i, j] - (A[i] - A[j]))
 
         sol = solve(Eqns, A)
@@ -207,7 +213,35 @@ class Hamiltonian:
         self.transformed = T.adjoint() @ self.hamiltonian @ T - 1j * T.adjoint() @ diff(
             T, Symbol("t", real=True)
         )
+
         self.transformed = nsimplify(simplify(self.transformed))
+
+    def remove_common_energy(self) -> None:
+        """
+        Remove common energy offsets from all diagonal entries of the hamiltonian by
+        checking which energies are present in all ground states as defined by the
+        couplings dictionary
+        """
+        # check which symbolic variables occur in all diagonal ground state entries and
+        # remove them from the diagonal
+
+        # get ground states entries of the diagonal
+        coupling_ground_states = np.unique([key[0] for key in self.couplings.keys()])
+        diagonal = Matrix(
+            np.array(self.transformed.diagonal())[0, coupling_ground_states]
+        )
+
+        for par in diagonal.free_symbols:
+            # skip if the parameter is a detuning
+            if par in [d[-1] for d in self.detunings]:
+                continue
+
+            flag = True
+            for val in diagonal:
+                if par not in val.free_symbols:
+                    flag = False
+            if flag:
+                self.define_zero(par)
 
     def find_dark_states(self, ground_states, excited_states):
         """

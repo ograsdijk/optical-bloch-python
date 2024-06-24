@@ -8,6 +8,7 @@ from scipy.optimize import OptimizeResult, differential_evolution
 from sympy import (
     Eq,
     Function,
+    Matrix,
     Symbol,
     conjugate,
     diff,
@@ -34,7 +35,14 @@ class BlochEquations:
     solveSteadyStateSymbolic(replacements)
     """
 
-    def __init__(self, levels: int, density_matrix, hamiltonian, dissipator):
+    def __init__(
+        self,
+        levels: int,
+        density_matrix,
+        hamiltonian,
+        dissipator,
+        simplify: bool = True,
+    ):
         """
         Initial parameters:
         levels          : number of levels of system
@@ -47,12 +55,15 @@ class BlochEquations:
         self.dissipator = dissipator
         self.density_matrix = density_matrix
 
+        self.simplify = simplify
+
         # generate the ODE system of optical Bloch equations
         self.generate_equations()
-        # generate the steady state density matrix
-        self.generate_steady_state_density_matrix()
-        # generate the stead state system of optical Bloch equations
-        self.generate_equation_steady_state()
+
+        # # generate the steady state density matrix
+        # self.generate_steady_state_density_matrix()
+        # # generate the stead state system of optical Bloch equations
+        # self.generate_equation_steady_state()
 
     def generate_steady_state_density_matrix(self):
         """
@@ -61,34 +72,34 @@ class BlochEquations:
 
         Symbolic density matrix takes Hermitian properties into account.
         """
-        density_matrix = zeros(*self.hamiltonian.shape)
-        for i in range(self.hamiltonian.shape[0]):
-            for j in range(i, self.hamiltonian.shape[0]):
-                if i == j:
-                    # \u03C1 is unicode for ρ, chr(0x2080+i) is unicode for
-                    # subscript num(i), resulting in ρ₀₀ for example
-                    density_matrix[i, j] = Symbol(
-                        "\u03c1{0}{1}".format(chr(0x2080 + i), chr(0x2080 + j))
-                    )
-                else:
-                    density_matrix[i, j] = Symbol(
-                        "\u03c1{0}{1}".format(chr(0x2080 + i), chr(0x2080 + j))
-                    )
-                    density_matrix[j, i] = conjugate(
-                        Symbol("\u03c1{0}{1}".format(chr(0x2080 + i), chr(0x2080 + j)))
-                    )
-        self.density_matrix_steady_state = density_matrix
+        self.density_matrix_steady_state = Matrix(
+            self.levels,
+            self.levels,
+            lambda i, j: Symbol(f"ρ{i}{j}")
+            if j > i - 1
+            else conjugate(Symbol(f"ρ{j}{i}")),
+        )
 
     def generate_equations(self):
         """
         Generate the system of ODEs for the optical Bloch equations.
         """
-        self.equations = Eq(
-            diff(self.density_matrix),
-            simplify(
-                -1j * commute(self.hamiltonian, self.density_matrix) + self.dissipator
-            ),
-        )
+        if self.simplify:
+            self.equations = Eq(
+                diff(self.density_matrix),
+                simplify(
+                    -1j * commute(self.hamiltonian, self.density_matrix)
+                    + self.dissipator
+                ),
+            )
+        else:
+            self.equations = Eq(
+                diff(self.density_matrix),
+                (
+                    -1j * commute(self.hamiltonian, self.density_matrix)
+                    + self.dissipator
+                ),
+            )
 
     def generate_system(
         self, replacements: Sequence[tuple[Symbol, Number]], full_output: bool = False
@@ -100,22 +111,20 @@ class BlochEquations:
         t = Symbol("t", real=True)
         for i in range(self.levels):
             for j in range(i, self.levels):
-                tmp = Function("\u03c1{0}{1}".format(chr(0x2080 + i), chr(0x2080 + j)))
-                tmp1 = Symbol("\u03c1{0}{1}".format(chr(0x2080 + j), chr(0x2080 + i)))
-                eqns_rhs = eqns_rhs.subs(conjugate(tmp(t)), tmp1)
+                tmp = Function(f"ρ{i}{j}")(t)
+                tmp1 = Symbol(f"ρ{j}{i}")
+                eqns_rhs = eqns_rhs.subs(conjugate(tmp), tmp1)
 
         for i in range(self.levels):
             for j in range(i, self.levels):
-                tmp = Function("\u03c1{0}{1}".format(chr(0x2080 + i), chr(0x2080 + j)))
-                tmp1 = Symbol("\u03c1{0}{1}".format(chr(0x2080 + i), chr(0x2080 + j)))
-                eqns_rhs = eqns_rhs.subs(tmp(t), tmp1)
+                tmp = Function(f"ρ{i}{j}")(t)
+                tmp1 = Symbol(f"ρ{i}{j}")
+                eqns_rhs = eqns_rhs.subs(tmp, tmp1)
 
         syms = []
         for i in range(self.levels):
             for j in range(self.levels):
-                syms.append(
-                    Symbol("\u03c1{0}{1}".format(chr(0x2080 + i), chr(0x2080 + j)))
-                )
+                syms.append(Symbol(f"ρ{i}{j}"))
 
         # creating the matrix A (from Ax = b) for the ODE system
         matrix_eq = linear_eq_to_matrix(eqns_rhs, syms)[0]
@@ -139,13 +148,22 @@ class BlochEquations:
         Generate the steady state system of equations,
         e.g. dρ(t)/dt = 0 = -i[H,ρ]+L.
         """
-        self.equations_steady_state = Eq(
-            zeros(self.levels, self.levels),
-            simplify(
-                -1j * commute(self.hamiltonian, self.density_matrix_steady_state)
-                + self.dissipator
-            ),
-        )
+        if simplify:
+            self.equations_steady_state = Eq(
+                zeros(self.levels, self.levels),
+                simplify(
+                    -1j * commute(self.hamiltonian, self.density_matrix_steady_state)
+                    + self.dissipator
+                ),
+            )
+        else:
+            self.equations_steady_state = Eq(
+                zeros(self.levels, self.levels),
+                (
+                    -1j * commute(self.hamiltonian, self.density_matrix_steady_state)
+                    + self.dissipator
+                ),
+            )
         for i in range(self.levels):
             for j in range(self.levels):
                 self.equations_steady_state = self.equations_steady_state.replace(
@@ -161,16 +179,14 @@ class BlochEquations:
 
         for i in range(self.levels):
             for j in range(i, self.levels):
-                tmp = Symbol("\u03c1{0}{1}".format(chr(0x2080 + i), chr(0x2080 + j)))
-                tmp1 = Symbol("\u03c1{0}{1}".format(chr(0x2080 + j), chr(0x2080 + i)))
+                tmp = Symbol(f"ρ{i}{j}")
+                tmp1 = Symbol(f"ρ{j}{i}")
                 for idx in range(len(eqns_rhs)):
                     eqns_rhs[idx] = eqns_rhs[idx].subs(conjugate(tmp), tmp1)
         syms = []
         for i in range(self.levels):
             for j in range(self.levels):
-                syms.append(
-                    Symbol("\u03c1{0}{1}".format(chr(0x2080 + i), chr(0x2080 + j)))
-                )
+                syms.append(Symbol(f"ρ{i}{j}"))
         matrix_eq = linear_eq_to_matrix(eqns_rhs, syms)
         if full_output:
             return matrix_eq, syms
@@ -340,22 +356,20 @@ class BlochEquations:
         t = Symbol("t", real=True)
         for i in range(self.levels):
             for j in range(i, self.levels):
-                tmp = Function("\u03c1{0}{1}".format(chr(0x2080 + i), chr(0x2080 + j)))
-                tmp1 = Symbol("\u03c1{0}{1}".format(chr(0x2080 + j), chr(0x2080 + i)))
+                tmp = Function(f"ρ{i}{j}")
+                tmp1 = Symbol(f"ρ{j}{i}")
                 eqns_rhs = eqns_rhs.subs(conjugate(tmp(t)), tmp1)
 
         for i in range(self.levels):
             for j in range(i, self.levels):
-                tmp = Function("\u03c1{0}{1}".format(chr(0x2080 + i), chr(0x2080 + j)))
-                tmp1 = Symbol("\u03c1{0}{1}".format(chr(0x2080 + i), chr(0x2080 + j)))
+                tmp = Function(f"ρ{i}{j}")
+                tmp1 = Symbol(f"ρ{i}{j}")
                 eqns_rhs = eqns_rhs.subs(tmp(t), tmp1)
 
         syms = []
         for i in range(self.levels):
             for j in range(self.levels):
-                syms.append(
-                    Symbol("\u03c1{0}{1}".format(chr(0x2080 + i), chr(0x2080 + j)))
-                )
+                syms.append(Symbol(f"ρ{i}{j}"))
 
         # creating the matrix A (from Ax = b) for the ODE system, has symbolic
         # variables specified in parameters in matrix
