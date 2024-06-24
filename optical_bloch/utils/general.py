@@ -1,4 +1,9 @@
-def flatten(l):
+from typing import TypeVar
+
+T = TypeVar("T")
+
+
+def flatten(l: list[list[T]]) -> list[T]:
     """
     Flatten a list of lists.
 

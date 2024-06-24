@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "optical-bloch"
+version = "0.1.0"
+description = "package for setting up and solving a ODE system of optical Bloch equations"
+authors = ["ograsdijk <o.grasdijk@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "optical_bloch"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+numpy = "^2.0.0"
+scipy = "^1.13.1"
+matplotlib = "^3.9.0"
+networkx = "^3.3"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.4.9"
+mypy = "^1.10.0"
+pytest = "^8.2.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
