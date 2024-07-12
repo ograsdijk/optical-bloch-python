@@ -160,19 +160,13 @@ class Hamiltonian:
             ]
         )
 
-    def define_energy_detuning(self, initial_energy, final_energy, detuning, omega):
-        """ """
-        if detuning in [d[-1] for d in self.detunings]:
-            raise AssertionError("Detuning already defined.")
-
-        if omega not in self.frequencies:
-            raise AssertionError("Coupling does not exist")
-
-        self.transformed = self.transformed.subs(
-            omega, final_energy - initial_energy - detuning
-        )
-
-        self.detunings.append([omega, initial_energy, final_energy, detuning])
+    def setup_detunings(self) -> None:
+        """
+        Replace ω with Ef-Ei - δ for each defined coupling
+        """
+        for idc, ((idg, ide), omega) in enumerate(self.couplings.items()):
+            detuning = Symbol(f"δ{idc}", real=True)
+            self.define_state_detuning(idg, ide, detuning)
 
     def eqn_transform(self):
         """
@@ -264,3 +258,64 @@ class Hamiltonian:
         bright_states = M
         dark_states = M.nullspace()[0]
         return bright_states, dark_states
+
+    # def shortestCouplingPath(self, graph, initial_state):
+    #     """
+    #     """
+    #     # find the indices of the states which are defined as the zero_energy
+    #     indices_zero_energy = np.where(
+    #                             np.array(self.energies) == self.zero_energy)[1]
+    #     if indices_zero_energy.size == 0:
+    #         return 0
+
+    #     # get the first succesful shortest path from the initial state to a
+    #     # state with zero_energy
+    #     for idx in indices_zero_energy:
+    #         shortest_path = nx.algorithms.shortest_path(graph,
+    #                     source=initial_state, target = idx, weight = 'weight')
+    #         if shortest_path:
+    #             break
+
+    #     print(initial_state, shortest_path)
+
+    #     # calculate the total coupling phase between the initial state and final
+    #     # state
+    #     phase = 0
+    #     for j in range(len(shortest_path)-1):
+    #         start, stop = shortest_path[j:j+2]
+    #         if self.couplings[start,stop] != 0:
+    #             phase += self.couplings[start, stop]
+    #         else:
+    #             phase -= self.couplings[stop, start]
+    #     return phase
+
+    # def generalTransform(self, graph):
+    #     """
+    #     """
+    #     if not self.zero_energy:
+    #         raise AssertionError(
+    #         'Zero energy has to be specified for this transformation method.')
+
+    #     t = Symbol('t', real = True)
+
+    #     T = eye(self.levels)
+    #     for i in range(self.levels):
+    #         phase = self.shortestCouplingPath(graph, i)
+    #         T[i,i] = T[i,i]*symb_exp(1j*phase*t)
+    #     T = simplify(T)
+
+    #     self.transformed = T.adjoint()@self.hamiltonian@T \
+    #                             -1j*T.adjoint()@diff(T,Symbol('t', real = True))
+
+    #     if self.detunings:
+    #         print(self.detunings)
+    #         for i in range(len(self.detunings)):
+    #             detuning = self.detunings[i]
+    #             self.transformed = self.transformed.subs(
+    #                         detuning[3], detuning[1] - detuning[0] - detuning[2]
+    #                         )
+
+    #     if self.zero_energy:
+    #         self.transformed = self.transformed.subs(self.zero_energy, 0)
+
+    #     self.T = T
