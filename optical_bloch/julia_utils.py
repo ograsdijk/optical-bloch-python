@@ -18,6 +18,8 @@ except Exception as e:
     julia_flag = False
     logging.error("juliacall not installed; julia functionality not enabled")
 
+from .generate_code import get_compound_parameter_order
+
 
 class OdeParameters:
     def __init__(
@@ -113,9 +115,19 @@ class OdeParameters:
     def _time_evolution_compound_parameter(
         self, parameter: str, t: npt.NDArray[np.float64]
     ) -> npt.NDArray[np.float64]:
-        expression = self._compound_parameters[parameter]
+        expression = self.parameter_values[self._compound_parameters[parameter]]
 
-        expression = expression.subs(self.parameter_values)
+        # loop over to replace parameters, could be more elegant by figuring
+        # out the order like when the code is generated, but this works
+        while True:
+            expression = expression.subs(self.parameter_values)
+            repeat = False
+            for val in expression.free_symbols:
+                if val in self.parameter_values.values():
+                    repeat = True
+                    break
+            if not repeat:
+                break
 
         # vectorize over all function calls dotting (.) function calls, e.g. sin.(t)
         # instead of sin(t)
@@ -126,7 +138,6 @@ class OdeParameters:
         # operators
         pattern = r"([+\-*/^=<>])"
         str_expression = re.sub(pattern, r".\1", str_expression)
-
         jl.t = t
         return np.array(jl.seval(str_expression))
 
@@ -139,6 +150,8 @@ class OdeParameters:
             return np.ones(t.shape) * getattr(self, parameter)
         elif parameter in self._free_parameters.keys():
             return np.ones(t.shape) * getattr(self, parameter)
+        else:
+            raise IndexError(f"parameter {parameter} not found")
 
 
 @dataclass
