@@ -1,11 +1,13 @@
 from typing import Iterable, Sequence
 
+import networkx as nx
 import numpy as np
 from sympy import (
     Matrix,
     Symbol,
     conjugate,
     diff,
+    exp,
     eye,
     nsimplify,
     simplify,
@@ -157,8 +159,22 @@ class Hamiltonian:
                 self.hamiltonian[initial, initial],
                 self.hamiltonian[final, final],
                 detuning,
+                initial,
+                final,
             ]
         )
+
+    def _replace_with_detunings(self):
+        for w, Ei, Ef, detuning, initial, final in self.detunings:
+            # adding the detuning the the transformed matrix
+            if initial < final:
+                self.transformed = self.transformed.subs(
+                    w, self.energies[final] - self.energies[initial] - detuning
+                )
+            elif final < initial:
+                self.transformed = self.transformed.subs(
+                    w, self.energies[initial] - self.energies[final] - detuning
+                )
 
     def setup_detunings(self) -> None:
         """
@@ -210,6 +226,44 @@ class Hamiltonian:
 
         self.transformed = nsimplify(simplify(self.transformed))
 
+    def eqn_transform_graph(self):
+        t = Symbol("t", real=True)
+        T = eye(self.levels)
+        graph = nx.Graph()
+        graph.add_nodes_from(np.unique(np.nonzero(self.hamiltonian)))
+        graph.add_edges_from(
+            [
+                (idg, ide)
+                for idg, ide in zip(*np.nonzero(self.hamiltonian))
+                if idg != ide
+            ]
+        )
+        for idx in range(self.levels):
+            shortest_path = nx.algorithms.shortest_path(
+                graph, source=idx, target=self.levels - 1, weight="weight"
+            )
+            phase = 0
+            for j in range(len(shortest_path) - 1):
+                _val = shortest_path[j : j + 2]
+                start, stop = int(_val[0]), int(_val[1])
+                if (
+                    self.couplings.get((start, stop)) is None
+                    and self.couplings.get((stop, start)) is None
+                ):
+                    continue
+                elif self.couplings.get((start, stop)) is not None:
+                    phase += self.couplings[start, stop]
+                else:
+                    phase -= self.couplings[stop, start]
+
+            T[idx, idx] = T[idx, idx] * exp(1j * phase * t)
+
+        self.T = T
+        self.transformed = T.adjoint() @ self.hamiltonian @ T - 1j * T.adjoint() @ diff(
+            T, t
+        )
+        self.transformed = nsimplify(self.transformed)
+
     def remove_common_energy(self) -> None:
         """
         Remove common energy offsets from all diagonal entries of the hamiltonian by
@@ -227,7 +281,7 @@ class Hamiltonian:
 
         for par in diagonal.free_symbols:
             # skip if the parameter is a detuning
-            if par in [d[-1] for d in self.detunings]:
+            if par in [d[-3] for d in self.detunings]:
                 continue
 
             flag = True

@@ -19,6 +19,7 @@ class Dissipator:
         self.dissipator = zeros(levels, levels)
         self.branching = zeros(levels, levels)
         self.decay_rate = zeros(levels, 1)
+        self.decays: list[tuple[int, int, Symbol]] = []
         self.levels = levels
 
         self.generate_density_matrix()
@@ -64,6 +65,7 @@ class Dissipator:
         decay_rate_old = self.decay_rate[initial_state]
         decay_rate_new = decay_rate_old + gamma
         self.decay_rate[initial_state] += gamma
+        self.decays.append((initial_state, final_state, gamma))
 
         # add the decay to the branching ratio matrix
         for i in range(self.levels):

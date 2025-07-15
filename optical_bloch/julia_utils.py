@@ -4,6 +4,7 @@ import logging
 import re
 from dataclasses import dataclass
 from numbers import Number
+from pathlib import Path
 from typing import Sequence
 
 import numpy as np
@@ -17,8 +18,6 @@ try:
 except Exception as e:
     julia_flag = False
     logging.error("juliacall not installed; julia functionality not enabled")
-
-from .generate_code import get_compound_parameter_order
 
 
 class OdeParameters:
@@ -200,6 +199,8 @@ def get_diagonal_indices_flattened(
 def init_julia(lindblad_function: str) -> None:
     jl.seval(lindblad_function)
     jl.seval("using DifferentialEquations")
+    jl_file = Path(__file__).parent / "julia_functions.jl"
+    jl.seval(f'include("{jl_file.as_posix()}")')
 
 
 ### Single trajectories
@@ -261,11 +262,11 @@ def solve_problem(problem: OBEProblem, config: OBEProblemConfig) -> None:
 
 
 def get_results(solution_name: str = "sol") -> OBEResult:
-    t = np.array(jl.sol.t)
+    t = np.array(jl.seval(f"{solution_name}.t"))
     shape = jl.seval(f"size({solution_name})")
     y = np.zeros(shape[::-1], dtype=complex)
     for idx in range(t.size):
-        y[idx] = np.array(jl.sol.u[idx])
+        y[idx] = np.array(jl.seval(f"{solution_name}.u[{idx+1}]"))
     return OBEResult(t, y)
 
 
@@ -353,6 +354,8 @@ def init_julia_ensemble(lindblad_function: str, nprocs: int) -> None:
         jl.eval(f"rmprocs({procs})")
     jl.seval("@everywhere using DifferentialEquations")
     jl.seval(f"@everywhere {lindblad_function}")
+    jl_file = Path(__file__).parent / "julia_functions.jl"
+    jl.seval(f'@everywhere include("{jl_file.as_posix()}")')
 
 
 def define_ensemble_problem(ensemble_problem: OBEEnsembleProblem):
